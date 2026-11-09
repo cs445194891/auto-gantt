@@ -1,0 +1,15 @@
+{
+  "name": "auto-gantt",
+  "version": "1.0.0",
+  "description": "单文件离线甘特图生成器：Excel/CSV 导入、页面编辑、三种风格、双渲染引擎、多格式导出",
+  "scripts": {
+    "build": "node build/build.js"
+  },
+  "devDependencies": {
+    "mermaid": "10.9.3",
+    "xlsx": "0.18.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
