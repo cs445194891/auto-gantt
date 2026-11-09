@@ -17,9 +17,12 @@
 
 ## 完整许可证文本
 
-Apache-2.0 与 MIT 的完整条款未在本文件内转录（避免转录失真），请在执行 `npm install` 后查阅：
+两个库的许可证全文已从各自 npm 包内的 `package/LICENSE` **原样复制**到本仓库，不做转录改写：
 
-- `node_modules/xlsx/LICENSE`
-- `node_modules/mermaid/LICENSE`
+| 文件 | 内容 |
+| --- | --- |
+| `licenses/SheetJS-Apache-2.0.txt` | Apache License 2.0 全文（201 行） |
+| `licenses/Mermaid-MIT.txt` | MIT License 全文（版权 Knut Sveidqvist） |
+| `licenses/THIRD-PARTY-NOTICES.txt` | 本声明 + 两份全文的合并版，作为 Release 资产分发 |
 
-若将 `gantt.html` 作为独立文件对外分发，应随附本声明及上述完整许可证文本。
+`gantt.html` 内嵌这两个库，随 Release 对外分发。依据 Apache-2.0 §4(a)，接收者应获得许可证副本；MIT 要求随副本保留版权与许可声明。因此从 Releases 单独下载 `gantt.html` 时，应一并下载 `THIRD-PARTY-NOTICES.txt`，或直接查阅仓库 `licenses/` 目录。仓库根目录的 `LICENSE` 仅覆盖本项目自研代码（MIT），**不覆盖**上述第三方组件。

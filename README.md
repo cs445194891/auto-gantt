@@ -2,7 +2,7 @@
 
 一个无需后端、无需联网的单页面工具：导入 Excel/CSV 模板或直接在页面里填写任务，即时生成甘特图；支持三种视觉风格、两套渲染引擎、十项外观设置，并可导出为多种格式。
 
-**本仓库是源码仓库**：构建产物（`gantt.html` 与 `甘特图模板.xlsx`）不纳入版本控制，需本地构建生成。
+**本仓库是源码仓库**：构建产物（`gantt.html` 与 `甘特图模板.xlsx`）不纳入版本控制，需本地构建生成；也可直接从 [Releases](https://github.com/cs445194891/auto-gantt/releases) 下载预构建成品，无需构建。
 
 ## 快速开始
 
@@ -68,6 +68,7 @@ PNG（2 倍分辨率）、SVG、PDF（调起浏览器打印对话框，横向另
 │   ├── gantt.src.html      # 带占位符的源码（HTML/CSS/JS 全在此）
 │   ├── build.js            # 内嵌依赖并生成 HTML 与 Excel 模板
 │   └── vendor/             # 本地离线缓存（.gitignore 忽略）
+├── licenses/               # 两个第三方库的许可证全文 + 合并声明
 ├── package.json
 ├── README.md
 ├── THIRD-PARTY-NOTICES.md
@@ -78,4 +79,4 @@ PNG（2 倍分辨率）、SVG、PDF（调起浏览器打印对话框，横向另
 
 ## 许可证
 
-本仓库自研代码采用 **MIT** 许可证（仓库初始化时已生成 `LICENSE`）。内嵌第三方库的许可证另见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)：SheetJS 为 Apache-2.0，Mermaid 为 MIT；若把 `gantt.html` 作为独立文件对外分发，需一并附上该声明及各库完整许可证文本。
+本仓库自研代码采用 **MIT** 许可证（仓库初始化时已生成 `LICENSE`）。内嵌第三方库的许可证另见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)：SheetJS 为 Apache-2.0，Mermaid 为 MIT，两者的**完整许可证全文**已原样收录在 `licenses/` 目录，并随 Release 以 `THIRD-PARTY-NOTICES.txt` 分发。单独下载 `gantt.html` 时请一并保留该声明文件。
