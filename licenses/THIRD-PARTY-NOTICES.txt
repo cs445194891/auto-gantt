@@ -1,4 +1,4 @@
-auto-gantt v0.1.0 - Third-party notices
+auto-gantt v0.2.0 - Third-party notices
 ==========================================
 
 The self-contained file gantt.html embeds the following third-party UMD

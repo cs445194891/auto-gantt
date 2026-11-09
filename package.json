@@ -1,6 +1,6 @@
 {
   "name": "auto-gantt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "单文件离线甘特图生成器：Excel/CSV 导入、页面编辑、三种风格、双渲染引擎、多格式导出",
   "scripts": {
     "build": "node build/build.js"

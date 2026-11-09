@@ -54,6 +54,13 @@ td.bad input{border-color:var(--danger)!important;background:#2a1618!important}
 td input[type=checkbox]{accent-color:var(--accent)}
 .del{color:var(--danger);padding:3px 8px;border:0;background:transparent}
 .del:hover{background:#2a1618}
+.dragh{cursor:grab;user-select:none;color:var(--sub);font-size:14px;display:inline-block;margin-right:5px;letter-spacing:1px}
+.dragh:active{cursor:grabbing}
+tr.dragging{opacity:.35}
+tr.dropok td{background:#12263a}
+.chk{display:inline-flex;align-items:center;gap:5px;color:var(--sub);font-size:12px;white-space:nowrap;cursor:pointer}
+.chk input{accent-color:var(--accent);margin:0}
+.preset-row{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
 .collapsed .editor-body,.collapsed .code-body{display:none}
 .code-body pre{background:#0d1117;border:1px solid var(--line);border-radius:7px;padding:12px;overflow:auto;max-height:300px;margin:0;color:#c9d5e1;font-size:12px;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre}
 .foot{color:var(--sub);font-size:11px;line-height:1.7;padding:4px 2px}
@@ -122,16 +129,40 @@ input[type=range]{accent-color:var(--accent)}
       </select>
       <button id="exportBtn" class="primary">导出</button>
       <div class="divider"></div>
-      <span class="lbl">每日宽度</span>
-      <input type="range" id="zoom" min="8" max="44" step="1" value="24" style="width:120px">
-      <span class="lbl" id="zoomVal">24 px</span>
+      <span class="lbl">时间轴缩放</span>
+      <input type="range" id="zoom" min="1" max="100" step="1" value="50" style="width:120px">
+      <span class="lbl" id="zoomVal">日 · 24 px/日</span>
+      <select id="granSel" title="刻度粒度：默认自动随缩放分级，也可手动锁定">
+        <option value="auto">自动粒度</option>
+        <option value="day">按日</option>
+        <option value="week">按周</option>
+        <option value="month">按月</option>
+        <option value="quarter">按季</option>
+      </select>
+      <div class="divider"></div>
+      <span class="lbl">行高</span>
+      <input type="range" id="rowH" min="20" max="64" step="2" value="36" style="width:96px">
+      <span class="lbl" id="rowHVal">36 px</span>
+      <div class="divider"></div>
+      <span class="lbl">任务列宽</span>
+      <label class="chk"><input type="checkbox" id="nameAuto" checked>自动最窄</label>
+      <input type="range" id="nameW" min="90" max="320" step="2" value="160" style="width:96px">
+      <span class="lbl" id="nameWVal">自动</span>
       <div class="divider"></div>
       <button id="demoBtn">恢复示例数据</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span class="lbl">显示</span>
+      <label class="chk"><input type="checkbox" id="vToday" checked>今日红线</label>
+      <label class="chk"><input type="checkbox" id="vProgress" checked>百分比进度</label>
+      <label class="chk"><input type="checkbox" id="vDates">每条起止日期</label>
+      <span class="lbl">（关闭百分比进度＝全部任务条按已完成色显示；起止日期显示在任务列右侧新增列；以上以 SVG 精细引擎为准，全部随 JSON 导出 / 导入）</span>
     </div>
     <div class="status" id="status" style="margin-top:10px"></div>
   </div>
 
   <div class="hint" id="hint"></div>
+  <div class="hint" id="libWarn" style="display:none;border-left-color:var(--warn)"></div>
 
   <div id="chart"><div class="loading">正在生成甘特图…</div></div>
 
@@ -144,6 +175,11 @@ input[type=range]{accent-color:var(--accent)}
       </div>
     </div>
     <div class="settings-body">
+      <div class="preset-row">
+        <span class="lbl">配色组合</span>
+        <select id="presetSel"></select>
+        <span class="lbl">每种风格 4 套；切换只覆盖 7 项颜色，不重置字号；手动改色后自动标记为「自定义」</span>
+      </div>
       <div class="set-grid" id="setGrid"></div>
       <div class="set-tip">改动即时生效，同时作用于 SVG 与 Mermaid 引擎，并影响导出的 PNG / SVG 图片；设置随 JSON 导出与导入。切换风格会载入该风格自己的设置，不会覆盖另一套的自定义值。鼠标悬停控件可查看该项的默认值。</div>
     </div>
@@ -158,13 +194,13 @@ input[type=range]{accent-color:var(--accent)}
       </div>
     </div>
     <div class="editor-body">
-      <div class="hint show" style="margin-bottom:8px">必填：任务名称、开始日期、结束日期。其余可留空。里程碑勾选后按单点菱形显示，结束日期可省略。分组相同者自动归为同一段。</div>
+      <div class="hint show" style="margin-bottom:8px">必填：任务名称、开始日期、结束日期。其余可留空。里程碑勾选后按单点菱形显示，结束日期可省略。分组相同者自动归为同一段；拖动行首的 ⠿ 手柄可在同一分组内调整顺序，跨分组不可拖放。</div>
       <div class="table-scroll">
         <table id="dataTable">
           <thead><tr>
-            <th style="width:36px">#</th><th style="min-width:190px">任务名称</th>
-            <th>开始日期</th><th>结束日期</th><th style="min-width:120px">分组</th>
-            <th>进度 %</th><th style="min-width:100px">负责人</th><th>里程碑</th><th>操作</th>
+            <th style="width:56px">拖动 / #</th><th style="min-width:120px">分组</th><th style="min-width:190px">任务名称</th>
+            <th>开始日期</th><th>结束日期</th>
+            <th>进度 %</th><th>里程碑</th><th>操作</th>
           </tr></thead>
           <tbody id="tbody"></tbody>
         </table>
@@ -186,22 +222,30 @@ input[type=range]{accent-color:var(--accent)}
   <div class="foot" id="foot"></div>
 </div>
 
-<script>/*__XLSX_LIB__*/</script>
-<script>/*__MERMAID_LIB__*/</script>
+<script id="xlsxLib">/*__XLSX_LIB__*/</script>
+<script id="mmdLib">/*__MERMAID_LIB__*/</script>
 <script>
 "use strict";
 /* ============================ 状态 ============================ */
-var FIELDS = ["任务名称","开始日期","结束日期","分组","进度 %","负责人","里程碑"];
+var FIELDS = ["分组","任务名称","开始日期","结束日期","进度 %","里程碑"];
+/* 旧版 7 列模板含「负责人」列：新版不再输出该列。导入时该表头没有别名映射，会被自动忽略，
+   其余列按表头名定位，因此旧 .xlsx / .csv 仍能正常导入（无表头的旧 CSV 除外）。 */
 var FIELD_ALIASES = {
   name:["任务名称","任务","名称","task","taskname","任务名","事项"],
   start:["开始日期","开始时间","开始","startdate","start","起始日期"],
   end:["结束日期","结束时间","结束","enddate","end","完成日期","截止日期"],
   group:["分组","阶段","section","group","类别","模块"],
   progress:["进度 %","进度%","进度","完成率","progress","完成百分比"],
-  owner:["负责人","责任人","owner","执行人"],
   milestone:["里程碑","milestone","节点"]
 };
-var state = { title:"项目进度甘特图", style:"formal", engine:"svg", dayWidth:24, tasks:[] };
+var state = {
+  title:"项目进度甘特图", style:"formal", engine:"svg",
+  zoom:50, granularity:"auto", rowHeight:36,
+  nameAuto:true, nameW:160,
+  view:{today:true,progress:true,dates:false},
+  preset:{formal:0,minimal:0,vivid:0},
+  tasks:[]
+};
 var uid = 0;
 var renderTimer = null;
 var mmdSeq = 0;
@@ -220,10 +264,33 @@ var SET_ITEMS = [
   {k:"cMilestone", label:"里程碑色",        type:"color"},
   {k:"cToday",     label:"今日线色",        type:"color"}
 ];
+/* 每种风格 4 套默认配色组合。第 0 套即旧版默认，切换预设只覆盖 7 项颜色，不重置字号。 */
+var COLOR_KEYS = ["cTitle","cSection","cTask","cDone","cTodo","cMilestone","cToday"];
+var PRESETS = {
+  formal:[
+    {name:"经典蓝",  cTitle:"#16283f",cSection:"#1f3552",cTask:"#243244",cDone:"#2f5c9e",cTodo:"#dce5f0",cMilestone:"#c0392b",cToday:"#c0392b"},
+    {name:"墨绿公文",cTitle:"#12332c",cSection:"#1c443a",cTask:"#20392f",cDone:"#2e7d64",cTodo:"#dcefe7",cMilestone:"#b5651d",cToday:"#b5651d"},
+    {name:"深靛政务",cTitle:"#1c2540",cSection:"#2a3560",cTask:"#252b45",cDone:"#4a5aa8",cTodo:"#e0e4f5",cMilestone:"#a33a58",cToday:"#a33a58"},
+    {name:"赭石印章",cTitle:"#3a241d",cSection:"#573328",cTask:"#3b2a24",cDone:"#9a5b3d",cTodo:"#f2e3d8",cMilestone:"#8b2f2f",cToday:"#8b2f2f"}
+  ],
+  minimal:[
+    {name:"黑白灰",  cTitle:"#111111",cSection:"#333333",cTask:"#222222",cDone:"#353a41",cTodo:"#e6e6e6",cMilestone:"#111111",cToday:"#111111"},
+    {name:"冷灰蓝",  cTitle:"#1b2630",cSection:"#33424f",cTask:"#2b3742",cDone:"#54697c",cTodo:"#e8edf1",cMilestone:"#2b3742",cToday:"#2b3742"},
+    {name:"暖纸灰",  cTitle:"#2b2621",cSection:"#4a4038",cTask:"#3a332c",cDone:"#7a6a58",cTodo:"#efeae3",cMilestone:"#3a332c",cToday:"#3a332c"},
+    {name:"墨绿单色",cTitle:"#14241f",cSection:"#2c4239",cTask:"#22332c",cDone:"#3d6656",cTodo:"#e4ece8",cMilestone:"#22332c",cToday:"#22332c"}
+  ],
+  vivid:[
+    {name:"紫粉",    cTitle:"#402a75",cSection:"#55309c",cTask:"#33284a",cDone:"#7c3fbf",cTodo:"#ece0fb",cMilestone:"#c9316f",cToday:"#c9316f"},
+    {name:"青橙",    cTitle:"#0d4a55",cSection:"#0e6b78",cTask:"#123b45",cDone:"#12a4b8",cTodo:"#dcf4f7",cMilestone:"#f0913c",cToday:"#f0913c"},
+    {name:"莓果",    cTitle:"#5a1236",cSection:"#8a1d50",cTask:"#4a1730",cDone:"#d6557f",cTodo:"#fce3ec",cMilestone:"#7c3fbf",cToday:"#7c3fbf"},
+    {name:"森野",    cTitle:"#1d4626",cSection:"#2f6b38",cTask:"#203d28",cDone:"#2fae76",cTodo:"#e0f5e9",cMilestone:"#e0619b",cToday:"#e0619b"}
+  ]
+};
+function presetColors(p){ var o={}; COLOR_KEYS.forEach(function(k){ o[k]=p[k]; }); return o; }
 var DEFAULTS = {
-  formal:{ fsTitle:20, fsSection:13, fsTask:12, cTitle:"#16283f", cSection:"#1f3552", cTask:"#243244", cDone:"#2f5c9e", cTodo:"#dce5f0", cMilestone:"#c0392b", cToday:"#c0392b" },
-  minimal:{fsTitle:21, fsSection:12, fsTask:12, cTitle:"#111111", cSection:"#333333", cTask:"#222222", cDone:"#353a41", cTodo:"#e6e6e6", cMilestone:"#111111", cToday:"#111111" },
-  vivid:{  fsTitle:23, fsSection:13, fsTask:12, cTitle:"#402a75", cSection:"#55309c", cTask:"#33284a", cDone:"#7c3fbf", cTodo:"#ece0fb", cMilestone:"#c9316f", cToday:"#c9316f" }
+  formal: Object.assign({fsTitle:20,fsSection:13,fsTask:12}, presetColors(PRESETS.formal[0])),
+  minimal:Object.assign({fsTitle:21,fsSection:12,fsTask:12}, presetColors(PRESETS.minimal[0])),
+  vivid:  Object.assign({fsTitle:23,fsSection:13,fsTask:12}, presetColors(PRESETS.vivid[0]))
 };
 var settings = {};
 ["formal","minimal","vivid"].forEach(function(s){ settings[s]=Object.assign({},DEFAULTS[s]); });
@@ -245,6 +312,130 @@ function contrastText(hex){
   if(!/^#[0-9a-fA-F]{6}$/.test(String(hex))) return "#ffffff";
   var n=parseInt(String(hex).slice(1),16), r=(n>>16)&255, g=(n>>8)&255, b=n&255;
   return ((0.299*r+0.587*g+0.114*b)/255)>0.62 ? "#1a1a1a" : "#ffffff";
+}
+/* ============ 时间轴缩放与刻度分级 ============
+   滑块 1–100 对数映射到「每日等效像素」0.3–44；任务条始终按真实日期线性定位，
+   粒度只决定网格与标签的单位。粒度默认自动分级，也可由下拉手动锁定。 */
+var ZMIN=0.3, ZMAX=44, ZLO=Math.log(ZMAX/ZMIN);
+var UNIT_NAME={day:"日",week:"周",month:"月",quarter:"季"};
+var UNIT_DAYS={day:1,week:7,month:30.44,quarter:91.31};
+function pxPerDay(){
+  var z=Math.max(1,Math.min(100,+state.zoom||50));
+  return ZMIN*Math.exp(ZLO*(z-1)/99);
+}
+function zoomFromPx(px){
+  var p=Math.max(ZMIN,Math.min(ZMAX,px));
+  return Math.round(1+99*Math.log(p/ZMIN)/ZLO);
+}
+function autoUnit(px){
+  if(px>=6) return "day";
+  if(px>=1.5) return "week";
+  if(px>=0.5) return "month";
+  return "quarter";
+}
+function curUnit(){ return state.granularity==="auto"?autoUnit(pxPerDay()):state.granularity; }
+function zoomLabel(){
+  var u=curUnit();
+  return UNIT_NAME[u]+" · "+Math.round(pxPerDay()*UNIT_DAYS[u])+" px/"+UNIT_NAME[u];
+}
+function shortDate(s){ return String(s||"").slice(2).replace(/-/g,"/"); }
+/* ============ 左侧列宽与依赖自检 ============
+   估算口径与 clip() 完全一致（中文按字号、其余按 0.58 字号），因此「自动最窄」
+   算出的像素与 SVG 内实际截断判断一致，且导出的 SVG 不依赖浏览器字体度量。 */
+function estWidth(s,fs){
+  var w=0; s=String(s==null?"":s);
+  for(var i=0;i<s.length;i++) w+=/[\u4e00-\u9fa5]/.test(s[i])?fs:fs*0.58;
+  return w;
+}
+function clampNameW(v){ return Math.max(90,Math.min(320,Math.ceil(v))); }
+function nameColumnW(S){
+  if(!state.nameAuto) return clampNameW(+state.nameW||160);
+  var fs=Math.max(8,S.fsTask-2), mx=estWidth("任务 / 分组",fs);
+  grouped().forEach(function(g){
+    mx=Math.max(mx,estWidth(g.name,S.fsSection));
+    g.tasks.forEach(function(t){ mx=Math.max(mx,estWidth(t.name,S.fsTask)); });
+  });
+  return clampNameW(mx+30);
+}
+function dateColumnW(S){
+  if(!state.view.dates) return 0;
+  return Math.min(220,Math.ceil(estWidth("00/00/00-00/00/00",Math.max(8,S.fsTask-2))+24));
+}
+/* 源码文件里的依赖只是占位符；构建后占位符被完整库替换。据此区分「打开了源码」与
+   「成品被损坏」，避免只丢出一句无从下手的「未加载」。 */
+function isSourceBuild(){
+  var s=document.getElementById("mmdLib");
+  return !!(s && s.textContent.indexOf("__MERMAID_LIB__")>=0);
+}
+function libWarningHTML(){
+  return "⚠ 当前打开的是<b>未构建的源码文件 build/gantt.src.html</b>：Excel 依赖与 Mermaid 库只是占位符，"+
+    "Excel 导入 / 导出 .xlsx 与 Mermaid 引擎不可用。请在项目根目录执行 "+
+    "<code>npm install &amp;&amp; npm run build</code> 后打开生成的 <b>gantt.html</b>，"+
+    "或直接下载 Releases 中的成品 <b>gantt.html</b>。SVG 精细引擎、页面手填、"+
+    "PNG / SVG / PDF / CSV / JSON / .mmd 导出不受影响。";
+}
+/* 上层色带：日 / 周按月份切块，月 / 季按年份切块 */
+function bandList(minD,maxD,u){
+  var out=[], d=minD, byYear=(u==="month"||u==="quarter"), guard=0;
+  while(d<=maxD&&guard++<800){
+    var dt=new Date(d*86400000), y=dt.getUTCFullYear(), m=dt.getUTCMonth(), last, label;
+    if(byYear){
+      last=Math.min(maxD,dayNum((y+1)+"-01-01")-1); label=y+" 年";
+    }else{
+      var ny=(m===11)?y+1:y, nm=(m===11)?1:m+2;
+      last=Math.min(maxD,dayNum(ny+"-"+pad(nm)+"-01")-1); label=y+" 年 "+(m+1)+" 月";
+    }
+    if(last<d) last=d;
+    out.push({start:d,end:last,label:label});
+    d=last+1;
+  }
+  return out;
+}
+/* 刻度边界：按日历生成每个单位的起始日，标签随粒度变化 */
+function tickList(minD,maxD,u){
+  var out=[], d=new Date(minD*86400000), y=d.getUTCFullYear(), m=d.getUTCMonth(), i, n, dt2;
+  if(u==="day"){
+    for(n=minD;n<=maxD;n++){
+      dt2=new Date(n*86400000);
+      out.push({d:n,label:String(dt2.getUTCDate())});
+    }
+  }else if(u==="week"){
+    var wd=(d.getUTCDay()+6)%7;
+    for(n=minD-wd;n<=maxD;n+=7){
+      dt2=new Date(n*86400000);
+      out.push({d:n,label:pad(dt2.getUTCMonth()+1)+"/"+pad(dt2.getUTCDate())});
+    }
+  }else if(u==="month"){
+    for(i=0;i<800;i++){
+      n=dayNum(y+"-"+pad(m+1)+"-01");
+      if(n>maxD) break;
+      if(n>=minD-40) out.push({d:n,label:pad(y%100)+"/"+pad(m+1)});
+      m++; if(m>11){ m=0; y++; }
+    }
+  }else{
+    m=Math.floor(m/3)*3;
+    for(i=0;i<300;i++){
+      n=dayNum(y+"-"+pad(m+1)+"-01");
+      if(n>maxD) break;
+      if(n>=minD-100) out.push({d:n,label:pad(y%100)+" Q"+(m/3+1)});
+      m+=3; if(m>11){ m=0; y++; }
+    }
+  }
+  return out;
+}
+function syncZoomUI(){
+  $("zoom").value=state.zoom;
+  $("zoomVal").textContent=zoomLabel();
+  $("granSel").value=state.granularity;
+  $("rowH").value=state.rowHeight;
+  $("rowHVal").textContent=state.rowHeight+" px";
+  $("vToday").checked=state.view.today;
+  $("vProgress").checked=state.view.progress;
+  $("vDates").checked=state.view.dates;
+  $("nameAuto").checked=state.nameAuto;
+  $("nameW").value=state.nameW;
+  $("nameW").disabled=state.nameAuto;
+  $("nameWVal").textContent=(state.nameAuto?"自动 ":"")+nameColumnW(curSet())+" px";
 }
 
 /* ============================ 通用工具 ============================ */
@@ -302,15 +493,15 @@ function showHint(msg,kind){
 function demoData(){
   var t=today(), d=dayNum(t), f=function(n){ return fromNum(d+n); };
   return [
-    {name:"需求调研与范围确认", start:f(-6),  end:f(-1),  group:"一、准备阶段", progress:100, owner:"张工", milestone:false},
-    {name:"方案编制与评审",     start:f(-2),  end:f(4),   group:"一、准备阶段", progress:65,  owner:"李工", milestone:false},
-    {name:"立项评审通过",       start:f(5),   end:f(5),   group:"一、准备阶段", progress:100, owner:"",     milestone:true},
-    {name:"设备采购与到货",     start:f(3),   end:f(14),  group:"二、实施阶段", progress:30,  owner:"王工", milestone:false},
-    {name:"现场安装调试",       start:f(12),  end:f(24),  group:"二、实施阶段", progress:0,   owner:"王工", milestone:false},
-    {name:"系统联调测试",       start:f(22),  end:f(31),  group:"二、实施阶段", progress:0,   owner:"赵工", milestone:false},
-    {name:"试运行与问题整改",   start:f(31),  end:f(42),  group:"三、验收阶段", progress:0,   owner:"赵工", milestone:false},
-    {name:"文档归档与培训",     start:f(40),  end:f(47),  group:"三、验收阶段", progress:0,   owner:"李工", milestone:false},
-    {name:"项目终验",           start:f(49),  end:f(49),  group:"三、验收阶段", progress:0,   owner:"",     milestone:true}
+    {name:"需求调研与范围确认", start:f(-6),  end:f(-1),  group:"一、准备阶段", progress:100, milestone:false},
+    {name:"方案编制与评审",     start:f(-2),  end:f(4),   group:"一、准备阶段", progress:65,  milestone:false},
+    {name:"立项评审通过",       start:f(5),   end:f(5),   group:"一、准备阶段", progress:100, milestone:true},
+    {name:"设备采购与到货",     start:f(3),   end:f(14),  group:"二、实施阶段", progress:30,  milestone:false},
+    {name:"现场安装调试",       start:f(12),  end:f(24),  group:"二、实施阶段", progress:0,   milestone:false},
+    {name:"系统联调测试",       start:f(22),  end:f(31),  group:"二、实施阶段", progress:0,   milestone:false},
+    {name:"试运行与问题整改",   start:f(31),  end:f(42),  group:"三、验收阶段", progress:0,   milestone:false},
+    {name:"文档归档与培训",     start:f(40),  end:f(47),  group:"三、验收阶段", progress:0,   milestone:false},
+    {name:"项目终验",           start:f(49),  end:f(49),  group:"三、验收阶段", progress:0,   milestone:true}
   ];
 }
 function normalize(raw){
@@ -325,7 +516,6 @@ function normalize(raw){
       start:start, end:end,
       group:String(r.group==null?"":r.group).trim()||"未分组",
       progress:parseProgress(r.progress),
-      owner:String(r.owner==null?"":r.owner).trim(),
       milestone:ms
     };
   });
@@ -374,6 +564,7 @@ function themeCSS(style){
     ".nametxt{fill:"+S.cTask+";font-size:"+fsB+"px;}",
     ".daytxt{fill:"+S.cTask+";font-size:"+Math.max(8,fsB-2)+"px;}",
     ".outtxt{fill:"+S.cTask+";font-size:"+Math.max(9,fsB-1)+"px;font-weight:600;}",
+    ".datetxt{fill:"+S.cTask+";font-size:"+Math.max(8,fsB-2)+"px;opacity:.82;}",
     ".legend{fill:"+S.cTask+";font-size:"+Math.max(8,fsB-2)+"px;opacity:.78;}",
     ".todaytxt{fill:"+S.cToday+";font-size:"+Math.max(8,fsB-2)+"px;font-weight:bold;}",
     ".today{stroke:"+S.cToday+";stroke-width:1.5;stroke-dasharray:5 4;}",
@@ -430,17 +621,20 @@ function renderSVG(){
   showHint(v.errs.length?("数据提示："+v.errs.slice(0,4).join("；")+(v.errs.length>4?" 等 "+v.errs.length+" 条":"")):"", "warn");
   if(!list.length){ $("chart").innerHTML='<div class="loading">没有可绘制的有效任务，请在下方表格填写任务名称与日期，或导入 Excel。</div>'; lastSvgEl=null; return null; }
 
-  var style=state.style, dw=state.dayWidth;
+  var style=state.style, px=pxPerDay(), unit=curUnit(), view=state.view, S=curSet();
   var minD=Math.min.apply(null,list.map(function(t){return dayNum(t.start);}));
   var maxD=Math.max.apply(null,list.map(function(t){return dayNum(t.end);}));
   var span=maxD-minD+1;
-  var leftW=228, headH=62, footH=38, rowH=(style==="minimal"?40:34), secH=28;
+  var headH=62, footH=38, rowH=state.rowHeight, secH=28;
+  var nameW=nameColumnW(S), dateW=dateColumnW(S), leftW=nameW+dateW;
+  $("nameWVal").textContent=(state.nameAuto?"自动 ":"")+nameW+" px";
+  var bh=Math.max(14,Math.min(rowH-8,Math.round(rowH*0.55)));
   var groups=grouped().filter(function(g){ return g.tasks.some(function(t){return isDate(t.start)&&isDate(t.end);}); });
   var rows=groups.reduce(function(n,g){return n+g.tasks.length;},0);
   var totalH=headH+groups.length*secH+rows*rowH+footH;
-  var totalW=leftW+span*dw+76; /* 右侧留白：容纳进度百分比与里程碑文字 */
+  var rightW=view.progress?62:28; /* 起止日期已移到左侧列，右侧只留百分比与里程碑文字 */
+  var totalW=leftW+span*px+rightW;
   var plotX=leftW, plotY=headH;
-  var S=curSet();
 
   var svg=el("svg",{xmlns:"http://www.w3.org/2000/svg","xmlns:xlink":"http://www.w3.org/1999/xlink",width:totalW,height:totalH,viewBox:"0 0 "+totalW+" "+totalH});
   var defs=el("defs");
@@ -452,45 +646,53 @@ function renderSVG(){
   var st=el("style"); st.setAttribute("type","text/css"); st.textContent=themeCSS(style); svg.appendChild(st);
   svg.appendChild(el("rect",{x:0,y:0,width:totalW,height:totalH,class:"bg"}));
 
-  /* 月份层 */
-  var d=minD, months=[];
-  while(d<=maxD){
-    var dt=new Date(d*86400000), y=dt.getUTCFullYear(), m=dt.getUTCMonth();
-    var ny=(m===11)?y+1:y, nm=(m===11)?1:m+2;
-    var last=Math.min(maxD, dayNum(ny+"-"+pad(nm)+"-01")-1);
-    if(last<d) last=d; // 兜底，防止任何边界情况下循环不推进
-    months.push({start:d,end:last,label:y+" 年 "+(m+1)+" 月"});
-    d=last+1;
-  }
-  months.forEach(function(mo){
-    var x=plotX+(mo.start-minD)*dw, w=(mo.end-mo.start+1)*dw;
+  /* 上层色带：日 / 周按月份切块，月 / 季按年份切块 */
+  var bands=bandList(minD,maxD,unit);
+  bands.forEach(function(mo){
+    var x=plotX+(mo.start-minD)*px, w=(mo.end-mo.start+1)*px;
+    if(w<=0) return;
     svg.appendChild(el("rect",{x:x,y:0,width:w,height:26,class:"monthbg"}));
     svg.appendChild(el("text",{x:x+w/2,y:18,"text-anchor":"middle",class:"monthtxt"},clip(mo.label,w-8,S.fsSection+1)));
     if(style!=="minimal") svg.appendChild(el("line",{x1:x,y1:0,x2:x,y2:totalH-footH,class:"monthline"}));
   });
-  /* 日期层 */
+  /* 刻度层：按当前粒度生成边界，再按像素密度自动抽稀网格与标签 */
   svg.appendChild(el("line",{x1:0,y1:26,x2:totalW,y2:26,class:"monthline"}));
   svg.appendChild(el("line",{x1:0,y1:headH,x2:totalW,y2:headH,class:"monthline"}));
-  var step=Math.max(1,Math.ceil(30/dw));
-  for(var i=0;i<span;i++){
-    var dn=minD+i, dt2=new Date(dn*86400000), wd=dt2.getUTCDay(), x2=plotX+i*dw;
-    if((wd===0||wd===6)&&style!=="minimal") svg.appendChild(el("rect",{x:x2,y:26,width:dw,height:totalH-26-footH,class:"weekend"}));
-    if(dw>=10) svg.appendChild(el("line",{x1:x2,y1:26,x2:x2,y2:totalH-footH,class:"grid"}));
-    if(i%step===0||dw>=30){
-      svg.appendChild(el("text",{x:x2+dw/2,y:45,"text-anchor":"middle",class:"daytxt"},dt2.getUTCDate()));
+  var ticks=tickList(minD,maxD,unit);
+  var unitPx=px*UNIT_DAYS[unit];
+  var gridEvery=Math.max(1,Math.ceil(10/unitPx));
+  var labEvery=Math.max(1,Math.ceil(54/unitPx));
+  /* 周末底色只在日粒度且格子够宽时绘制，避免长周期下生成上千个小矩形 */
+  if(unit==="day"&&px>=10&&style!=="minimal"){
+    for(var wi=0;wi<span;wi++){
+      var wd2=new Date((minD+wi)*86400000).getUTCDay();
+      if(wd2===0||wd2===6) svg.appendChild(el("rect",{x:plotX+wi*px,y:26,width:px,height:totalH-26-footH,class:"weekend"}));
     }
   }
-  /* 标题与左侧表头 */
+  ticks.forEach(function(tk,idx){
+    var xRaw=plotX+(tk.d-minD)*px;
+    if(xRaw<plotX-40||xRaw>plotX+span*px+0.5) return;
+    /* 月/季/周的首个刻度常早于项目起点：钳到左边界而非丢弃，保证任何周期都有刻度可见 */
+    var x=Math.max(plotX,xRaw);
+    if(idx%gridEvery===0&&unitPx>=8) svg.appendChild(el("line",{x1:x,y1:26,x2:x,y2:totalH-footH,class:"grid"}));
+    if(idx%labEvery===0){
+      var tx2=(unit==="day")?x+px/2:x+3;
+      svg.appendChild(el("text",{x:tx2,y:45,"text-anchor":unit==="day"?"middle":"start",class:"daytxt"},tk.label));
+    }
+  });
+  /* 标题与左侧表头：任务 / 分组列 + 可选的起止日期列 */
   svg.appendChild(el("rect",{x:0,y:0,width:leftW,height:26,class:"monthbg"}));
   svg.appendChild(el("text",{x:14,y:19,class:"gtitle"},clip(state.title,leftW-24,S.fsTitle)));
-  svg.appendChild(el("text",{x:14,y:45,class:"legend"},"任务 / 分组"));
+  svg.appendChild(el("text",{x:14,y:45,class:"legend"},clip("任务 / 分组",nameW-24,Math.max(8,S.fsTask-2))));
+  if(dateW) svg.appendChild(el("text",{x:nameW+10,y:45,class:"legend"},"起止日期"));
   svg.appendChild(el("line",{x1:leftW,y1:0,x2:leftW,y2:totalH-footH,class:"monthline"}));
+  if(dateW) svg.appendChild(el("line",{x1:nameW,y1:0,x2:nameW,y2:totalH-footH,class:"monthline"}));
   svg.appendChild(el("line",{x1:leftW,y1:26,x2:totalW,y2:26,class:"monthline"}));
 
-  /* 今日线 */
+  /* 今日线（受显示开关控制） */
   var td=dayNum(today());
-  if(td>=minD&&td<=maxD){
-    var tx=plotX+(td-minD)*dw+dw/2;
+  if(view.today&&td>=minD&&td<=maxD){
+    var tx=plotX+(td-minD)*px+Math.min(px/2,2);
     svg.appendChild(el("line",{x1:tx,y1:26,x2:tx,y2:totalH-footH,class:"today"}));
     svg.appendChild(el("text",{x:tx+4,y:headH-4,class:"todaytxt"},"今日"));
   }
@@ -510,35 +712,44 @@ function renderSVG(){
       if(!isDate(t.start)||!isDate(t.end)) return;
       svg.appendChild(el("rect",{x:0,y:y,width:totalW,height:rowH,"fill-opacity":0,class:"rowline"}));
       if(style!=="minimal") svg.appendChild(el("line",{x1:0,y1:y+rowH,x2:totalW,y2:y+rowH,class:"rowline"}));
-      var nt=el("text",{x:14,y:y+rowH/2+4,class:"nametxt"},clip(t.name,leftW-28,S.fsTask));
-      var ti=el("title"); ti.textContent=t.name+" | "+t.start+" ~ "+t.end+(t.owner?" | 负责人："+t.owner:"")+" | 进度："+t.progress+"%"; nt.appendChild(ti);
+      var nt=el("text",{x:14,y:y+rowH/2+4,class:"nametxt"},clip(t.name,nameW-28,S.fsTask));
+      var ti=el("title"); ti.textContent=t.name+" | "+t.start+" ~ "+t.end+" | 分组："+t.group+" | 进度："+t.progress+"%"; nt.appendChild(ti);
       svg.appendChild(nt);
+      if(dateW){
+        /* 起止日期固定在左侧新增列：YY/MM/DD-YY/MM/DD；里程碑是单点，只显示当天 */
+        var ds=t.milestone?shortDate(t.start):shortDate(t.start)+"-"+shortDate(t.end);
+        svg.appendChild(el("text",{x:nameW+10,y:y+rowH/2+4,class:"datetxt"},clip(ds,dateW-18,Math.max(8,S.fsTask-2))));
+      }
 
-      var bx=plotX+(dayNum(t.start)-minD)*dw, bw=Math.max(dw,(dayNum(t.end)-dayNum(t.start)+1)*dw);
-      var by=y+(rowH-(style==="vivid"?20:18))/2, bh=(style==="vivid"?20:18);
+      var bx=plotX+(dayNum(t.start)-minD)*px;
+      var bw=Math.max(Math.max(2,px),(dayNum(t.end)-dayNum(t.start)+1)*px);
+      var by=y+(rowH-bh)/2;
+      var rx = style==="vivid" ? bh/2 : (style==="formal"?2:0);
       if(t.milestone){
-        var cx=plotX+(dayNum(t.start)-minD)*dw+dw/2, cy=y+rowH/2, r=10;
+        var r=Math.max(5,Math.min(10,bh/2));
+        var cx=plotX+(dayNum(t.start)-minD)*px+Math.min(px/2,2), cy=y+rowH/2;
         svg.appendChild(el("polygon",{points:[cx,cy-r,cx+r,cy,cx,cy+r,cx-r,cy],fill:S.cMilestone,class:"diamond"}));
-        var ml=t.name+"  "+t.start, rightPx=totalW-(cx+r+6)-10;
+        var ml=t.name, rightPx=totalW-(cx+r+6)-10;
         if(rightPx>=ml.length*10){
           svg.appendChild(el("text",{x:cx+r+6,y:cy+4,class:"mltxt"},clip(ml,rightPx,Math.max(8,S.fsTask-2))));
         }else{
           svg.appendChild(el("text",{x:cx-r-6,y:cy+4,"text-anchor":"end",class:"mltxt"},clip(ml,Math.max(0,cx-r-16),Math.max(8,S.fsTask-2))));
         }
       }else{
-        var rx = style==="vivid" ? bh/2 : (style==="formal"?2:0);
-        /* 未完成：浅底 + 描边；已完成：不透明实色。两者形成强对比 */
-        svg.appendChild(el("rect",{x:bx,y:by,width:bw,height:bh,rx:rx,ry:rx,fill:todoCol,stroke:lighten(todoCol,-38),class:"bar"}));
-        var pw=bw*t.progress/100;
-        if(pw>0){
-          svg.appendChild(el("rect",{x:bx,y:by,width:Math.min(pw,bw),height:bh,rx:rx,ry:rx,fill:doneCol,stroke:lighten(doneCol,-26),class:"prog"}));
-        }
-        /* 文字一律落在条形外的白色画布上，避免深浅双色底上的可读性损失 */
-        var pct=t.progress+"%", px=bx+bw+7;
-        if(px+34>totalW){
-          svg.appendChild(el("text",{x:bx+bw-6,y:by+bh/2+4,"text-anchor":"end",class:"outtxt",style:"fill:"+contrastText(doneCol)},pct));
-        }else{
-          svg.appendChild(el("text",{x:px,y:by+bh/2+4,class:"outtxt"},pct));
+        /* 关闭「百分比进度」＝不表达进度：所有任务条统一按 100% 的已完成色实心显示 */
+        var barFill=view.progress?todoCol:doneCol;
+        svg.appendChild(el("rect",{x:bx,y:by,width:bw,height:bh,rx:rx,ry:rx,fill:barFill,stroke:lighten(barFill,-38),class:"bar"}));
+        if(view.progress){
+          var pw=bw*t.progress/100;
+          if(pw>0){
+            svg.appendChild(el("rect",{x:bx,y:by,width:Math.min(pw,bw),height:bh,rx:rx,ry:rx,fill:doneCol,stroke:lighten(doneCol,-26),class:"prog"}));
+          }
+          var pct=t.progress+"%", outX=bx+bw+7;
+          if(outX+34>totalW){
+            svg.appendChild(el("text",{x:bx+bw-6,y:by+bh/2+4,"text-anchor":"end",class:"outtxt",style:"fill:"+contrastText(doneCol)},pct));
+          }else{
+            svg.appendChild(el("text",{x:outX,y:by+bh/2+4,class:"outtxt"},pct));
+          }
         }
       }
       y+=rowH;
@@ -546,7 +757,7 @@ function renderSVG(){
   });
   /* 页脚 */
   svg.appendChild(el("line",{x1:0,y1:totalH-footH,x2:totalW,y2:totalH-footH,class:"monthline"}));
-  var foot = "共 "+list.length+" 项任务 · "+groups.length+" 个分组 · "+fromNum(minD)+" 至 "+fromNum(maxD)+" · 风格："+({formal:"正式",minimal:"简约",vivid:"花哨"}[style])+" · 引擎：SVG 精细";
+  var foot = "共 "+list.length+" 项任务 · "+groups.length+" 个分组 · "+fromNum(minD)+" 至 "+fromNum(maxD)+" · 风格："+({formal:"正式",minimal:"简约",vivid:"花哨"}[style])+" · 刻度："+UNIT_NAME[unit]+" · 引擎：SVG 精细";
   svg.appendChild(el("text",{x:14,y:totalH-footH+23,class:"legend"},foot));
   if(style==="formal") svg.appendChild(el("rect",{x:0.5,y:0.5,width:totalW-1,height:totalH-footH-1,class:"frame"}));
 
@@ -563,14 +774,15 @@ function pad2(s){ return s.length<2?"0"+s:s; }
 /* ============================ Mermaid 引擎 ============================ */
 function mmdSafe(s){ return String(s==null?"":s).replace(/[:,\r\n#;]/g," ").replace(/\s+/g," ").trim(); }
 function toMermaid(){
-  var L=["gantt","    title "+(mmdSafe(state.title)||"甘特图"),"    dateFormat YYYY-MM-DD","    axisFormat %m/%d"];
+  /* Mermaid 引擎尽力对齐当前粒度与显示开关：季粒度无已核实的 3month 语法，降级为 1month */
+  var u=curUnit();
+  var axis=(u==="day"||u==="week")?"%m/%d":"%Y/%m";
+  var L=["gantt","    title "+(mmdSafe(state.title)||"甘特图"),"    dateFormat YYYY-MM-DD","    axisFormat "+axis];
   var list=usable();
   if(list.length){
-    var a=Math.min.apply(null,list.map(function(t){return dayNum(t.start);}));
-    var b=Math.max.apply(null,list.map(function(t){return dayNum(t.end);}));
-    L.push("    tickInterval "+(b-a>180?"1month":"1week"));
+    L.push("    tickInterval "+(u==="day"?"1day":(u==="week"?"1week":"1month")));
   }
-  L.push("    todayMarker stroke-width:2px,stroke:#d94a3d,opacity:0.8");
+  L.push("    todayMarker "+(state.view.today?"stroke-width:2px,stroke:#d94a3d,opacity:0.8":"stroke-width:0px,opacity:0"));
   var n=0;
   grouped().forEach(function(g){
     var ts=g.tasks.filter(function(t){return isDate(t.start)&&isDate(t.end);});
@@ -580,10 +792,12 @@ function toMermaid(){
       n++;
       var tags=[];
       if(t.milestone) tags.push("milestone");
+      else if(!state.view.progress) tags.push("done"); /* 不表达进度时统一按 100% 已完成色 */
       else if(t.progress>=100) tags.push("done");
       else if(t.progress>0) tags.push("active");
       var label=mmdSafe(t.name);
-      if(!t.milestone&&t.progress>0&&t.progress<100) label+="（"+t.progress+"%）";
+      if(state.view.dates) label+="〔"+shortDate(t.start)+"–"+shortDate(t.end)+"〕";
+      if(!t.milestone&&state.view.progress&&t.progress>0&&t.progress<100) label+="（"+t.progress+"%）";
       var meta=["t"+n,t.start];
       meta.push(t.milestone?"1d":t.end);
       L.push("    "+label+" :"+(tags.length?tags.join(" ")+", ":"")+meta.join(", "));
@@ -628,7 +842,17 @@ async function renderMermaid(){
   var code=toMermaid();
   $("codePre").textContent=code;
   if(!window.mermaid){
-    $("chart").innerHTML='<div class="loading">Mermaid 引擎未加载。</div>'; lastSvgEl=null; return;
+    var srcMode=isSourceBuild();
+    $("chart").innerHTML='<div class="loading">'+
+      (srcMode
+        ? 'Mermaid 库未内嵌：你打开的是源码文件 <b>build/gantt.src.html</b>。<br>请在项目根目录执行 <b>npm install &amp;&amp; npm run build</b>，再打开生成的 gantt.html；或下载 Releases 中的成品 gantt.html。'
+        : 'Mermaid 库加载失败：文件可能已被截断，或浏览器拦截了内嵌脚本。<br>请重新下载完整的 <b>gantt.html</b>（约 4 MB）后重试。')+
+      '<br>下方「Mermaid gantt 代码」已生成，可复制到 mermaid.live 使用。'+
+      '<br><br><button id="backToSvgBtn" class="primary">切回 SVG 精细引擎</button></div>';
+    var back=$("backToSvgBtn"); if(back) back.onclick=function(){ setEngine("svg"); };
+    lastSvgEl=null;
+    showHint(srcMode?libWarningHTML():"Mermaid 库加载失败；请重新下载完整的成品 gantt.html。","warn");
+    return;
   }
   var conf=mmdTheme(state.style);
   mermaid.initialize({startOnLoad:false,securityLevel:"loose",theme:conf.theme,themeVariables:conf.themeVariables,gantt:conf.gantt});
@@ -670,7 +894,7 @@ async function renderMermaid(){
     });
     $("chart").innerHTML=""; $("chart").appendChild(svg); lastSvgEl=svg;
     var v=validate();
-    showHint("Mermaid 引擎已启用：进度百分比仍只能以 done / active 状态 + 任务名后缀（xx%）近似表达；已完成 / 进行中 / 未完成三态已按「外观设置」的配色区分，轴、分组、任务文字对比度已提高。三种风格差异仍小于 SVG 引擎。"+(v.errs.length?"<br>数据提示："+v.errs.slice(0,2).join("；"):""), "warn");
+    showHint("Mermaid 引擎已启用：刻度粒度按当前「"+UNIT_NAME[curUnit()]+"」近似映射（季粒度降级为月刻度），今日线开关生效；关闭百分比进度时所有任务条统一按已完成色显示；起止日期只能以任务名后缀表达（SVG 引擎是左侧一列）；任务列宽与行高不生效。精度以 SVG 精细引擎为准。"+(v.errs.length?"<br>数据提示："+v.errs.slice(0,2).join("；"):""), "warn");
   }catch(e){
     $("chart").innerHTML='<div class="loading">Mermaid 渲染失败：'+esc(e&&e.message||e)+'<br>可在下方「Mermaid gantt 代码」中查看生成的代码并复制到 mermaid.live 排查。</div>';
     lastSvgEl=null;
@@ -701,10 +925,13 @@ function updateStatus(){
     '<span>渲染引擎 <b>'+(state.engine==="svg"?"SVG 精细":"Mermaid")+'</b></span>'+
     '<span>风格 <b>'+({formal:"正式",minimal:"简约",vivid:"花哨"}[state.style])+'</b></span>'+
     (v.errs.length?'<span class="warn">⚠ '+v.errs.length+' 条数据提示</span>':'<span class="ok">✓ 数据校验通过</span>');
-  $("foot").innerHTML="字段口径：任务名称 / 开始日期 / 结束日期 / 分组 / 进度 % / 负责人 / 里程碑。不做任务依赖、关键路径、资源平衡等项目管理逻辑。<br>"+
+  $("foot").innerHTML="字段口径（6 列）：分组 / 任务名称 / 开始日期 / 结束日期 / 进度 % / 里程碑。不做任务依赖、关键路径、资源平衡等项目管理逻辑。<br>"+
     "内置库：SheetJS 0.18.5（Excel 读写）+ Mermaid 10.9.3（gantt 渲染），均已内嵌，断网可用；本页不上传任何数据。<br>"+
+    "「任务列宽」默认按最长任务 / 分组名自动取最窄，取消「自动最窄」后可用滑块手动调 90–320 px；「每条起止日期」开启后在任务列右侧新增一列显示 YY/MM/DD-YY/MM/DD，关闭时整列消失。<br>"+
+    "关闭「百分比进度」表示不表达进度：所有任务条统一按已完成色实心显示（Mermaid 引擎同口径），百分比文字同时隐藏。<br>"+
+    "「时间轴缩放」按日→周→月→季自动分级刻度，也可用「粒度」下拉手动锁定；「行高」与三个显示开关以 SVG 精细引擎为准，Mermaid 引擎尽力对齐。<br>"+
     "PDF 导出通过浏览器打印对话框实现（横向、另存为 PDF），不是直接生成 .pdf 文件；Mermaid 引擎下导出的图片为该引擎的 SVG 外观。<br>"+
-    "「外观设置」中的 10 项按风格各自保存、可一键恢复默认，同时作用于两个引擎并影响导出的图片；设置随 JSON 导出 / 导入。";
+    "「外观设置」10 项按风格各自保存，每风格另有 4 套配色组合；设置与视图选项（含列宽）随 JSON 导出 / 导入。";
 }
 function markBad(v){
   var trs=$("tbody").children;
@@ -725,13 +952,12 @@ function buildTable(){
   var tb=$("tbody"); tb.innerHTML="";
   state.tasks.forEach(function(t,i){
     var tr=document.createElement("tr");
-    tr.innerHTML='<td style="color:var(--sub)">'+(i+1)+'</td>'+
+    tr.innerHTML='<td style="color:var(--sub)"><span class="dragh" draggable="true" title="拖动以在本分组内调整顺序">⠿</span>'+(i+1)+'</td>'+
+      '<td><input type="text" data-k="group" value="'+esc(t.group)+'"></td>'+
       '<td><input type="text" data-k="name" value="'+esc(t.name)+'"></td>'+
       '<td><input type="date" data-k="start" value="'+esc(t.start)+'"></td>'+
       '<td><input type="date" data-k="end" value="'+esc(t.end)+'"></td>'+
-      '<td><input type="text" data-k="group" value="'+esc(t.group)+'"></td>'+
       '<td><input type="number" data-k="progress" min="0" max="100" value="'+t.progress+'"></td>'+
-      '<td><input type="text" data-k="owner" value="'+esc(t.owner)+'"></td>'+
       '<td style="text-align:center"><input type="checkbox" data-k="milestone" '+(t.milestone?"checked":"")+'></td>'+
       '<td><button class="del" title="删除此行">✕</button></td>';
     tb.appendChild(tr);
@@ -749,6 +975,48 @@ function buildTable(){
     var tr=e.target.closest("tr"), i=Array.prototype.indexOf.call(tb.children,tr);
     if(i>=0){ state.tasks.splice(i,1); buildTable(); schedule(); }
   };
+  /* 拖放排序：只允许在同一分组的连续区块内移动；跨分组（含中间夹着别的分组）一律拒绝 */
+  var dragIdx=-1;
+  function rowIdx(tr){ return Array.prototype.indexOf.call(tb.children,tr); }
+  function sameBlock(a,b){
+    if(a<0||b<0||!state.tasks[a]||!state.tasks[b]) return false;
+    var g=state.tasks[a].group, lo=Math.min(a,b), hi=Math.max(a,b);
+    for(var i=lo;i<=hi;i++) if(state.tasks[i].group!==g) return false;
+    return true;
+  }
+  function clearMarks(){ Array.prototype.forEach.call(tb.children,function(tr){ tr.classList.remove("dragging","dropok"); }); }
+  tb.ondragstart=function(e){
+    var h=e.target.closest?e.target.closest(".dragh"):null;
+    if(!h){ e.preventDefault(); return; }
+    var tr=h.closest("tr"); dragIdx=rowIdx(tr);
+    e.dataTransfer.effectAllowed="move";
+    try{ e.dataTransfer.setData("text/plain",String(dragIdx)); }catch(_){}
+    tr.classList.add("dragging");
+  };
+  tb.ondragover=function(e){
+    if(dragIdx<0) return;
+    var tr=e.target.closest?e.target.closest("tr"):null; if(!tr||!e.dataTransfer) return;
+    clearMarks();
+    if(sameBlock(dragIdx,rowIdx(tr))){ e.preventDefault(); e.dataTransfer.dropEffect="move"; tr.classList.add("dropok"); }
+    else { e.dataTransfer.dropEffect="none"; }
+  };
+  tb.ondrop=function(e){
+    if(dragIdx<0) return;
+    var tr=e.target.closest?e.target.closest("tr"):null; if(!tr) return;
+    var to=rowIdx(tr); e.preventDefault(); clearMarks();
+    if(to===dragIdx){ dragIdx=-1; return; }
+    if(!sameBlock(dragIdx,to)){
+      dragIdx=-1;
+      showHint("只能在同一分组内调整顺序：目标行与拖动行之间的所有行必须属于同一分组。若要换组，请直接修改「分组」列。","warn");
+      return;
+    }
+    var moved=state.tasks.splice(dragIdx,1)[0];
+    state.tasks.splice(to,0,moved);
+    dragIdx=-1;
+    buildTable(); schedule();
+    showHint("已在本分组「"+moved.group+"」内调整顺序。","ok");
+  };
+  tb.ondragend=function(){ dragIdx=-1; clearMarks(); };
   markBad(validate());
 }
 
@@ -782,10 +1050,11 @@ function rowsToTasks(rows){
   for(var i=hi+1;i<rows.length;i++){
     var row=rows[i];
     if(!row||!row.length||row.every(function(c){ return c==null||String(c).trim()===""; })) continue;
-    var get=function(k){ return hasHeader&&map[k]!==undefined ? row[map[k]] : row[({name:0,start:1,end:2,group:3,progress:4,owner:5,milestone:6})[k]]; };
+    /* 无表头时按新版列序：分组 / 任务名称 / 开始 / 结束 / 进度 / 里程碑 */
+    var get=function(k){ return hasHeader&&map[k]!==undefined ? row[map[k]] : row[({group:0,name:1,start:2,end:3,progress:4,milestone:5})[k]]; };
     var name=String(get("name")==null?"":get("name")).trim();
     if(!name) continue;
-    arr.push({ name:name, start:get("start"), end:get("end"), group:get("group"), progress:get("progress"), owner:get("owner"), milestone:get("milestone") });
+    arr.push({ group:get("group"), name:name, start:get("start"), end:get("end"), progress:get("progress"), milestone:get("milestone") });
   }
   return arr;
 }
@@ -799,11 +1068,25 @@ function handleFile(file){
         state.title=o.title||state.title; $("titleInput").value=state.title;
         if(o.style&&["formal","minimal","vivid"].indexOf(o.style)>=0) setStyle(o.style);
         if(o.engine&&["svg","mermaid"].indexOf(o.engine)>=0) setEngine(o.engine);
-        if(o.dayWidth) { state.dayWidth=Math.max(8,Math.min(44,+o.dayWidth||24)); $("zoom").value=state.dayWidth; $("zoomVal").textContent=state.dayWidth+" px"; }
+        if(o.zoom!==undefined) state.zoom=Math.max(1,Math.min(100,Math.round(+o.zoom||50)));
+        else if(o.dayWidth) state.zoom=zoomFromPx(+o.dayWidth||24); /* 兼容 v0.1.0 的 dayWidth 字段 */
+        if(o.rowHeight!==undefined) state.rowHeight=Math.max(20,Math.min(64,Math.round(+o.rowHeight||36)));
+        if(o.nameAuto!==undefined) state.nameAuto=!!o.nameAuto;
+        if(o.nameW!==undefined) state.nameW=Math.max(90,Math.min(320,Math.round(+o.nameW||160)));
+        if(o.granularity&&["auto","day","week","month","quarter"].indexOf(o.granularity)>=0) state.granularity=o.granularity;
+        if(o.view&&typeof o.view==="object"){
+          ["today","progress","dates"].forEach(function(k){ if(typeof o.view[k]==="boolean") state.view[k]=o.view[k]; });
+        }
+        if(o.preset&&typeof o.preset==="object"){
+          ["formal","minimal","vivid"].forEach(function(s){
+            var pv=+o.preset[s];
+            if(isFinite(pv)&&pv>=-1&&pv<PRESETS[s].length) state.preset[s]=Math.round(pv);
+          });
+        }
         if(o.settings) mergeSettings(o.settings);
         state.tasks=normalize(o.tasks);
-        syncSettingsUI();
-        buildTable(); draw(); showHint("已导入 JSON："+state.tasks.length+" 行数据"+(o.settings?"（含外观设置）":"")+"。","ok");
+        syncZoomUI(); syncSettingsUI();
+        buildTable(); draw(); showHint("已导入 JSON："+state.tasks.length+" 行数据（含外观设置、配色组合与视图选项）。","ok");
       }catch(e){ showHint("JSON 解析失败："+esc(e.message)); }
     };
     reader.readAsText(file,"utf-8"); return;
@@ -815,7 +1098,7 @@ function handleFile(file){
         var txt=String(reader.result).replace(/^\uFEFF/,"");
         rows=parseCSV(txt);
       }else{
-        if(!window.XLSX) throw new Error("Excel 解析库未加载");
+        if(!window.XLSX) throw new Error(isSourceBuild()?"Excel 库未内嵌：当前是源码文件 build/gantt.src.html，请先 npm run build 生成 gantt.html":"Excel 解析库未加载");
         var wb=XLSX.read(new Uint8Array(reader.result),{type:"array",cellDates:true});
         var ws=wb.Sheets[wb.SheetNames[0]];
         rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
@@ -849,7 +1132,7 @@ function parseCSV(txt){
 function taskRows(){
   var head=FIELDS.slice();
   var body=state.tasks.map(function(t){
-    return [t.name,t.start,t.end,t.group,t.progress,t.owner,t.milestone?"是":"否"];
+    return [t.group,t.name,t.start,t.end,t.progress,t.milestone?"是":"否"];
   });
   return [head].concat(body);
 }
@@ -861,31 +1144,31 @@ function templateRows(){
   var d=dayNum(today()), f=function(n){ return fromNum(d+n); };
   return [
     FIELDS.slice(),
-    ["示例：需求调研与范围确认", f(0),  f(5),  "一、准备阶段", 100, "张工", "否"],
-    ["示例：方案编制与评审",     f(3),  f(12), "一、准备阶段", 60,  "李工", "否"],
-    ["示例：立项评审通过",       f(14), f(14), "二、实施阶段", 0,   "",     "是"]
+    ["一、准备阶段", "示例：需求调研与范围确认", f(0),  f(5),  100, "否"],
+    ["一、准备阶段", "示例：方案编制与评审",     f(3),  f(12), 60,  "否"],
+    ["二、实施阶段", "示例：立项评审通过",       f(14), f(14), 0,   "是"]
   ];
 }
 function exportXLSX(dataOnly){
-  if(!window.XLSX){ showHint("Excel 库未加载，无法导出 .xlsx；可改用 CSV。"); return; }
+  if(!window.XLSX){ showHint(isSourceBuild()?"Excel 库未内嵌（当前是源码文件），无法导出 .xlsx；请先用 npm run build 生成 gantt.html，或改用 CSV。":"Excel 库未加载，无法导出 .xlsx；可改用 CSV。","warn"); return; }
   var wb=XLSX.utils.book_new();
   var ws=XLSX.utils.aoa_to_sheet(dataOnly?taskRows():templateRows());
-  ws["!cols"]=[{wch:28},{wch:14},{wch:14},{wch:18},{wch:10},{wch:12},{wch:10}];
+  ws["!cols"]=[{wch:18},{wch:28},{wch:14},{wch:14},{wch:10},{wch:10}];
   XLSX.utils.book_append_sheet(wb,ws,"任务数据");
   var note=[
     ["字段","是否必填","格式 / 说明"],
+    ["分组","选填","首列；相同分组自动归入同一段，按首次出现顺序排列"],
     ["任务名称","必填","文本，任意字符；建议不超过 20 字"],
-    ["开始日期","必填","YYYY-MM-DD，如 2026-11-09；也支持 2026/11/9、2026年11月9日"],
+    ["开始日期","必填","YYYY-MM-DD，如 "+today()+"；也支持 2026/11/9、2026年11月9日"],
     ["结束日期","必填","同上；含结束当日。里程碑行可留空"],
-    ["分组","选填","相同分组自动归入同一段，按首次出现顺序排列"],
-    ["进度 %","选填","0–100 的数字；留空按 0 处理"],
-    ["负责人","选填","仅作为鼠标悬停提示，不显示在条形上"],
+    ["进度 %","选填","0–100 的整数；不按小数比例解释；留空按 0 处理"],
     ["里程碑","选填","填 是 / Y / 1 / ✓ 均视为里程碑，显示为菱形单点"],
     ["","",""],
     ["提示","","本表第一行为表头，从第二行开始填任务；空白行会被忽略"],
-    ["提示","","导入支持 .xlsx / .xls / .csv，也支持本页导出的 .json"],
     ["提示","","模板中带「示例：」前缀的 3 行仅供参照格式，正式填写前请删除"],
-    ["提示","","进度 % 请填 0–100 的整数；不按小数比例解释"],
+    ["提示","","导入支持 .xlsx / .xls / .csv，也支持本页导出的 .json"],
+    ["提示","","本表为 6 列；旧版 7 列模板中的「负责人」列会被自动忽略，其余列按表头名读取"],
+    ["提示","","页面表格可拖动行首 ⠿ 手柄在同一分组内排序，跨分组不可拖放；导出按当前顺序"],
     ["提示","","本工具不做任务依赖、关键路径、资源平衡等项目管理逻辑"]
   ];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(note),"填写说明");
@@ -919,10 +1202,14 @@ async function exportPNG(){
   }catch(e){ showHint("PNG 导出失败："+esc(e.message)+"。可改用 SVG 或 PDF（打印）。"); }
 }
 function exportJSON(){
-  download(JSON.stringify({title:state.title,style:state.style,engine:state.engine,dayWidth:state.dayWidth,
+  download(JSON.stringify({title:state.title,style:state.style,engine:state.engine,
+    zoom:state.zoom,granularity:state.granularity,rowHeight:state.rowHeight,
+    nameAuto:state.nameAuto,nameW:state.nameW,
+    view:JSON.parse(JSON.stringify(state.view)),
+    preset:JSON.parse(JSON.stringify(state.preset)),
     settings:JSON.parse(JSON.stringify(settings)),
     tasks:state.tasks.map(function(t){
-      return {name:t.name,start:t.start,end:t.end,group:t.group,progress:t.progress,owner:t.owner,milestone:t.milestone};
+      return {group:t.group,name:t.name,start:t.start,end:t.end,progress:t.progress,milestone:t.milestone};
     })},null,2),fileBase()+".json","application/json;charset=utf-8");
 }
 function doExport(){
@@ -937,6 +1224,16 @@ function doExport(){
 }
 
 /* ============================ 外观设置 UI ============================ */
+function syncPresetUI(){
+  var sel=$("presetSel"); if(!sel) return;
+  var s=state.style, cur=state.preset[s];
+  sel.innerHTML="";
+  PRESETS[s].forEach(function(p,i){
+    var o=document.createElement("option"); o.value=String(i); o.textContent=p.name; sel.appendChild(o);
+  });
+  if(cur<0){ var o2=document.createElement("option"); o2.value="-1"; o2.textContent="自定义"; sel.appendChild(o2); }
+  sel.value=String(cur);
+}
 function buildSettingsUI(){
   var g=$("setGrid"); g.innerHTML="";
   SET_ITEMS.forEach(function(it){
@@ -958,6 +1255,7 @@ function syncSettingsUI(){
     var code=$("hex-"+it.k); if(code) code.textContent=S[it.k];
   });
   var n=$("setStyleName"); if(n) n.textContent=({formal:"正式",minimal:"简约",vivid:"花哨"})[state.style];
+  syncPresetUI();
 }
 $("setGrid").oninput=function(e){
   var inp=e.target,k=inp.dataset.set; if(!k) return;
@@ -969,13 +1267,24 @@ $("setGrid").oninput=function(e){
     if(!/^#[0-9a-fA-F]{6}$/.test(inp.value)) return;
     S[k]=inp.value.toLowerCase();
     var code=$("hex-"+k); if(code) code.textContent=S[k];
+    state.preset[state.style]=-1; /* 手动改色后不再属于任何预设 */
+    syncPresetUI();
   }
   schedule();
 };
+$("presetSel").onchange=function(){
+  var i=parseInt(this.value,10), s=state.style;
+  if(isNaN(i)||i<0||i>=PRESETS[s].length) return;
+  COLOR_KEYS.forEach(function(k){ settings[s][k]=PRESETS[s][i][k]; });
+  state.preset[s]=i;
+  syncSettingsUI(); schedule();
+  showHint("已切换到「"+({formal:"正式",minimal:"简约",vivid:"花哨"})[s]+"」风格的配色组合："+PRESETS[s][i].name+"。","ok");
+};
 $("resetSettingsBtn").onclick=function(){
   settings[state.style]=Object.assign({},DEFAULTS[state.style]);
+  state.preset[state.style]=0;
   syncSettingsUI(); schedule();
-  showHint("已恢复「"+({formal:"正式",minimal:"简约",vivid:"花哨"})[state.style]+"」风格的默认外观。","ok");
+  showHint("已恢复「"+({formal:"正式",minimal:"简约",vivid:"花哨"})[state.style]+"」风格的默认外观（配色组合 1）。","ok");
 };
 $("toggleSettingsBtn").onclick=function(){
   var p=$("settingsPanel"); p.classList.toggle("collapsed");
@@ -999,14 +1308,24 @@ function setEngine(e){
 $("styleSeg").onclick=function(e){ if(e.target.dataset.style) setStyle(e.target.dataset.style); };
 $("engineSeg").onclick=function(e){ if(e.target.dataset.engine) setEngine(e.target.dataset.engine); };
 $("titleInput").oninput=function(){ state.title=this.value||"甘特图"; schedule(); };
-$("zoom").oninput=function(){ state.dayWidth=+this.value; $("zoomVal").textContent=this.value+" px"; if(state.engine==="svg") schedule(); };
+$("zoom").oninput=function(){ state.zoom=+this.value; $("zoomVal").textContent=zoomLabel(); schedule(); };
+$("granSel").onchange=function(){ state.granularity=this.value; $("zoomVal").textContent=zoomLabel(); schedule(); };
+$("rowH").oninput=function(){ state.rowHeight=+this.value; $("rowHVal").textContent=this.value+" px"; if(state.engine==="svg") schedule(); };
+$("vToday").onchange=function(){ state.view.today=this.checked; schedule(); };
+$("vProgress").onchange=function(){ state.view.progress=this.checked; schedule(); };
+$("vDates").onchange=function(){ state.view.dates=this.checked; schedule(); };
+$("nameAuto").onchange=function(){ state.nameAuto=this.checked; $("nameW").disabled=this.checked; schedule(); };
+$("nameW").oninput=function(){ state.nameW=+this.value; if(!state.nameAuto){ $("nameWVal").textContent=this.value+" px"; if(state.engine==="svg") schedule(); } };
 $("importBtn").onclick=function(){ $("fileInput").click(); };
 $("fileInput").onchange=function(){ if(this.files&&this.files[0]) handleFile(this.files[0]); this.value=""; };
-$("templateBtn").onclick=function(){ exportXLSX(false); showHint("模板已下载：第一张表填任务，第二张表是字段说明。","ok"); };
+$("templateBtn").onclick=function(){
+  if(!window.XLSX){ showHint(libWarningHTML(),"warn"); return; }
+  exportXLSX(false); showHint("模板已下载：第一张表填任务，第二张表是字段说明。","ok");
+};
 $("exportBtn").onclick=doExport;
 $("addRowBtn").onclick=function(){
   var t=today();
-  state.tasks.push(normalize([{name:"新任务",start:t,end:t,group:(grouped().slice(-1)[0]||{name:"未分组"}).name,progress:0,owner:"",milestone:false}])[0]);
+  state.tasks.push(normalize([{group:(grouped().slice(-1)[0]||{name:"未分组"}).name,name:"新任务",start:t,end:t,progress:0,milestone:false}])[0]);
   buildTable(); schedule();
 };
 $("demoBtn").onclick=function(){ state.tasks=normalize(demoData()); buildTable(); draw(); showHint("已恢复示例数据。","ok"); };
@@ -1024,15 +1343,20 @@ function fitWidth(){
   var list=usable(); if(!list.length) return;
   var a=Math.min.apply(null,list.map(function(t){return dayNum(t.start);}));
   var b=Math.max.apply(null,list.map(function(t){return dayNum(t.end);}));
-  var span=b-a+1, avail=($("chart").clientWidth||1200)-304;
-  var dw=Math.max(8,Math.min(44,Math.floor(avail/span)));
-  state.dayWidth=dw; $("zoom").value=dw; $("zoomVal").textContent=dw+" px";
+  var span=b-a+1;
+  var chrome=nameColumnW(curSet())+dateColumnW(curSet())+(state.view.progress?62:28)+20;
+  var avail=($("chart").clientWidth||1200)-chrome;
+  state.zoom=zoomFromPx(avail/Math.max(1,span));
+  syncZoomUI();
 }
 buildSettingsUI();
 state.tasks=normalize(demoData());
 buildTable();
 fitWidth();
 draw();
+if(isSourceBuild()){
+  var lw=$("libWarn"); lw.innerHTML=libWarningHTML(); lw.style.display="block";
+}
 </script>
 </body>
 </html>
